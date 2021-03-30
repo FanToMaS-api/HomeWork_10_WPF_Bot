@@ -5,27 +5,25 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Mail;
-using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using HomeWork_10_WPF_Bot;
 using System.Collections.ObjectModel;
-using System.Windows.Media;
 
 namespace HomeWork_10_WPF_Bot
 {
     internal class Telegram
     {
         private static string token = File.ReadAllText(@"C:\Users\ти\source\repos\TelegramToken.txt"); // Токен в телеге
-        // коллекция для вывода сообщений, присылаемых боту на окно
-        public ObservableCollection<Messages> messages;
-        // словарь, содержащий всех пользователей
-        private static Dictionary<long, string> usersId = new Dictionary<long, string>(); 
+       
+        public ObservableCollection<Messages> messages;  // коллекция для вывода сообщений, присылаемых боту на окно
+
+        private static Dictionary<long, string> usersId = new Dictionary<long, string>(); // словарь, содержащий всех пользователей
         private TelegramBotClient bot;
         private MainWindow window;
-        static bool userTextAvailible = false;
+        static bool userTextAvailible = false; // флаг для переключения работы бота с MosRu на определение авторства текстов
         /// <summary>
         /// Конструктор для запуска работы бота
         /// </summary>
@@ -37,8 +35,7 @@ namespace HomeWork_10_WPF_Bot
             messages = new ObservableCollection<Messages>();
             CreateDictionaryOfUsersId(); // загружает пользователей уже писавших боту в словарь
             bot.OnMessage += MessageListener;
-            bot.StartReceiving();
-            
+            bot.StartReceiving();            
         }
         /// <summary>
         /// Событие возникающее при получении новых смс ботом
@@ -56,14 +53,20 @@ namespace HomeWork_10_WPF_Bot
                     e.Message.Chat.Id, e.Message.Date.ToShortTimeString())));
 
             if (e.Message.Text != null && userTextAvailible != true)
-                SendMail(e.Message.Chat.FirstName, e.Message.Text, "");
-            if (userTextAvailible)
             {
-                userTextAvailible = false;
-                SendMail(e.Message.Chat.FirstName, e.Message.Text, "UserText.txt");
-                bot.SendTextMessageAsync(e.Message.Chat.Id, "Спасибо, твой текст принят на обработку!");
-                bot.SendTextMessageAsync(e.Message.Chat.Id, "Если снова понадобится помощь, просто пришли файл в формате .txt");
+                e.Message.Chat.Description = ""; 
+                Thread thread = new Thread(SendMail);
+                thread.Start(e);
             }
+            //if (userTextAvailible)
+            //{
+            //    userTextAvailible = false;
+            //    e.Message.Chat.Description = "UserText.txt"; 
+            //    Thread thread = new Thread(SendMail);
+            //    thread.Start(e);
+            //    bot.SendTextMessageAsync(e.Message.Chat.Id, "Спасибо, твой текст принят на обработку!");
+            //    bot.SendTextMessageAsync(e.Message.Chat.Id, "Если снова понадобится помощь, просто пришли файл в формате .txt");
+            //}
 
             if (!usersId.ContainsKey(e.Message.Chat.Id))
             {
@@ -89,11 +92,13 @@ namespace HomeWork_10_WPF_Bot
                 else
                     bot.SendTextMessageAsync(e.Message.Chat.Id, $"Детка! Мне нужно название длиннее <<{e.Message.Text}>>");
             }
-            else if (e.Message.Type == global::Telegram.Bot.Types.Enums.MessageType.Document)
-                Download(e.Message.Document.FileId, e.Message.Chat.Id, e.Message.Chat.FirstName, e.Message.Document.FileName);
-            else if (e.Message.Type == global::Telegram.Bot.Types.Enums.MessageType.Photo)
-                Download(e.Message.Photo[e.Message.Photo.Length-1].FileId, e.Message.Chat.Id, 
-                    e.Message.Chat.FirstName, "Photo");
+            else if (e.Message.Type == global::Telegram.Bot.Types.Enums.MessageType.Document 
+                || e.Message.Type == global::Telegram.Bot.Types.Enums.MessageType.Photo)
+            {
+                //Task.Factory.StartNew(Download, e);
+                Thread thread = new Thread(Download);
+                thread.Start(e);
+            }
             else
                 bot.SendTextMessageAsync(e.Message.Chat.Id, "Наверное ты промахнулся и прислал не тот файл. Попробуй еще раз!)");
 
@@ -106,22 +111,39 @@ namespace HomeWork_10_WPF_Bot
         /// <param name="chatId"> Id чата</param>
         /// <param name="FirstNameOfUser"> Имя пользователя</param>
         /// <param name="FileName"> Имя файла, полученного от пользователя</param>
-        private async void Download(string fileId, long chatId, string FirstNameOfUser, string FileName)
+        private async void Download(object l)
         {
-            var file = await bot.GetFileAsync(fileId);
+            string fileId, FirstNameOfUser, FileName;
+            long chatId;
+            var e = l as global::Telegram.Bot.Args.MessageEventArgs;
+            if (e.Message.Document == null)
+            {
+                fileId = e.Message.Photo[e.Message.Photo.Length - 1].FileId;
+                FileName = $"Photo{e.Message.Photo.GetHashCode()}";
+            }
+            else
+            {
+                fileId = e.Message.Document.FileId;
+                FileName = e.Message.Document.FileName;
+            }
+            FirstNameOfUser = e.Message.Chat.FirstName;
+            
+            chatId = e.Message.Chat.Id;
+            var file = await bot.GetFileAsync(fileId);           
+            var path = @"C:\Users\ти\source\repos\HomeWork_10_WPF_Bot\HomeWork_10_WPF_Bot\bin\Debug\Пользовательские файлы\";
+            FileStream fs = new FileStream($"{path}{FileName}{Path.GetExtension(file.FilePath)}", FileMode.Create);
+            await bot.DownloadFileAsync(file.FilePath, fs);
+            fs.Close();
+            fs.Dispose();
+            e.Message.Chat.Description = $"{path}{FileName}{Path.GetExtension(file.FilePath)}";
+            Thread thread = new Thread(SendMail);
+            thread.Start(e);
             var r = new Random();
             string[] buff = new string[] {
                 "Получи ответочку!;)",
                 "Забери, ты обронил...",
                 "Ах ты, шалун! Присылаешь тут всякую чушь)) Держи обратно!" };
             await bot.SendTextMessageAsync(chatId, buff[r.Next(0, 3)]);
-
-            var path = @"C:\Users\ти\source\repos\HomeWork_10_WPF_Bot\HomeWork_10_WPF_Bot\bin\Debug\Пользовательские файлы\";
-            FileStream fs = new FileStream($"{path}{FileName}{Path.GetExtension(file.FilePath)}", FileMode.Create);
-            await bot.DownloadFileAsync(file.FilePath, fs);
-            fs.Close();
-            fs.Dispose();
-            SendMail(FirstNameOfUser, "", $"{path}{FileName}{Path.GetExtension(file.FilePath)}");
             if (Path.GetExtension(file.FilePath).Equals(".jpg", StringComparison.InvariantCultureIgnoreCase)
                 || Path.GetExtension(file.FilePath).Equals(".png", StringComparison.InvariantCultureIgnoreCase)
                 || Path.GetExtension(file.FilePath).Equals(".jpeg", StringComparison.InvariantCultureIgnoreCase))
@@ -136,7 +158,9 @@ namespace HomeWork_10_WPF_Bot
                 //    || Path.GetExtension(file.FilePath).Equals(".zip", StringComparison.InvariantCultureIgnoreCase)
                 //    || Path.GetExtension(file.FilePath).Equals(".xlsx", StringComparison.InvariantCultureIgnoreCase))
                 await bot.SendDocumentAsync(chatId, fileId);
-            //}                        
+            //}
+
+            Thread.CurrentThread.Abort();
         }
         /// <summary>
         /// Отправляет на указанную почту все сообщения и файлы, пришедшие  боту
@@ -144,9 +168,13 @@ namespace HomeWork_10_WPF_Bot
         /// <param name="nameOfUser"> Имя пользователя</param>
         /// <param name="message"> Его сообщение</param>
         /// <param name="path"> Путь к файлу</param>
-        private void SendMail(string nameOfUser, string message, string path)
+        private void SendMail(object l)
         {
-
+            var e = l as global::Telegram.Bot.Args.MessageEventArgs;
+            string nameOfUser, message, path;
+            nameOfUser = e.Message.Chat.FirstName;
+            message = e.Message.Text;
+            path = e.Message.Chat.Description; // "UserText.txt"
             MailAddress from = new MailAddress("misha.fuuuux@gmail.com");
             string password = "70Aroper";
             MailAddress to = new MailAddress("misha.dulov@mail.ru");

@@ -16,7 +16,7 @@ namespace HomeWork_10_WPF_Bot
 {
     internal class Telegram
     {
-        private static string token = File.ReadAllText(@"C:\Users\ти\source\repos\TelegramToken.txt"); // Токен в телеге
+        private static string token = File.ReadAllText(@"TelegramToken.txt"); // Токен в телеге
        
         public ObservableCollection<Messages> messages;  // коллекция для вывода сообщений, присылаемых боту на окно
 
@@ -175,9 +175,9 @@ namespace HomeWork_10_WPF_Bot
             nameOfUser = e.Message.Chat.FirstName;
             message = e.Message.Text;
             path = e.Message.Chat.Description; // "UserText.txt"
-            MailAddress from = new MailAddress("misha.fuuuux@gmail.com");
-            string password = "70Aroper";
-            MailAddress to = new MailAddress("misha.dulov@mail.ru");
+            MailAddress from = new MailAddress(File.ReadAllText(@"MailLoginFrom.txt"));
+            string password = File.ReadAllText(@"Password.txt");
+            MailAddress to = new MailAddress(File.ReadAllText(@"MailLoginTo.txt"));
             MailMessage mailMessage = new MailMessage(from, to);
             mailMessage.Subject = $"{DateTime.Now}"; //тема письма
             if (path != "")
@@ -187,7 +187,7 @@ namespace HomeWork_10_WPF_Bot
             mailMessage.Body = $"<h4>{nameOfUser} {message}</h4>";  // текст письма h4 - размер
             mailMessage.IsBodyHtml = true;  // письмо представляет код html
             SmtpClient smtp = new SmtpClient("smtp.gmail.com", 587);  // адрес smtp-сервера и порт, с которого будем отправлять письмо
-            smtp.Credentials = new NetworkCredential("misha.fuuuux@gmail.com".Split('@')[0], password);  // логин и пароль
+            smtp.Credentials = new NetworkCredential(File.ReadAllText(@"MailLoginFrom.txt").Split('@')[0], password);  // логин и пароль
             smtp.EnableSsl = true;
             smtp.DeliveryMethod = SmtpDeliveryMethod.Network;
             mailMessage.BodyEncoding = Encoding.UTF8;
@@ -235,7 +235,7 @@ namespace HomeWork_10_WPF_Bot
         private void WorkWithMosRu(string street, long chatId)
         {
             #region Подготовка к работе с порталом
-            string tokenMosRu = File.ReadAllText(@"C:\Users\ти\source\repos\MosRuToken.txt"); // токен на сайте Mos.ru
+            string tokenMosRu = File.ReadAllText(@"MosRuToken.txt"); // токен на сайте Mos.ru
             WebClient wc = new WebClient();
             string versionOfPortal = JObject.Parse(wc.DownloadString(@"https://apidata.mos.ru/version"))["Version"].ToString(); // получаю версию портала
             string startUrl = @"https://apidata.mos.ru/v";
